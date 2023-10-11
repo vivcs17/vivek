@@ -1,0 +1,178 @@
+Command:
+
+git clone https://github.com/ashishrpandey/example-voting-app 
+
+Observation:
+
+Cloned the example-voting-app package from Git hub.
+
+-----------------------------------------------------------------
+
+command:
+
+cd /root/example-voting-app/k8s-specifications
+
+Observation:
+
+Under this folder service and deployment related yaml files found. 
+
+-----------------------------------------------------------------
+
+command:
+
+kubectl apply -f .
+
+Observation:
+
+Ran the above command, so that all the yaml files has been executed from current directory.
+
+-----------------------------------------------------------------
+
+command:
+
+kubectl get pods --> Listed all the installed pods.
+
+kubectl get deployment --> Listed all the kind deployments.
+
+kubectl get svc --> Listed all the installed services.
+
+kubectl get rs --> Listed all the replicasets
+
+kubectl get all --> Listed all the above in single shot.
+
+-----------------------------------------------------------------  
+
+command output:
+
+[root@ip-172-31-25-193 k8s-specifications]# kubectl get svc
+NAME         TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+db           ClusterIP   10.110.197.229   <none>        5432/TCP         15h
+kubernetes   ClusterIP   10.96.0.1        <none>        443/TCP          15h
+redis        ClusterIP   10.106.6.45      <none>        6379/TCP         15h
+result       NodePort    10.110.91.167    <none>        5001:31001/TCP   15h
+vote         NodePort    10.102.133.198   <none>        5000:31000/TCP   15h
+
+Observation:
+
+From above output, observed that nodeport assigned to Result and Vote pods since those two are only visible from outside the network.
+
+31001 Port used for resulting
+31000 Port user for voting.
+
+Above two ports are service ports so these can be found from vote-service.yaml and result-service.yaml files. 
+-----------------------------------------------------------------  
+
+When i entered this URL http://18.141.56.124:31000/ in chrome tab, Voting page displayed with checkbox where we can poll our voting.
+
+When i entered this URL http://18.141.56.124:31001/ in another chrome tab, Result page displayed with % mark.
+
+Once i polled the vote, able to see reflection in the result page.
+
+----------------------------------------------------------------- 
+
+command:
+
+kubectl logs vote-94849dc97-lthmm
+
+observation:
+
+when i polled the vote, from the above command observed that Post/Get method send the data(vote) to server.
+
+[2023-05-17 04:09:07,245] INFO in app: Received vote for b
+[2023-05-17 04:09:07 +0000] [7] [INFO] Received vote for b
+192.168.11.128 - - [17/May/2023:04:09:07 +0000] "POST / HTTP/1.1" 200 1696 "http://18.141.56.124:31000/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
+192.168.11.128 - - [17/May/2023:04:09:07 +0000] "GET /static/stylesheets/style.css HTTP/1.1" 304 0 "http://18.141.56.124:31000/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
+
+----------------------------------------------------------------- 
+
+command:
+
+kubectl logs db-b54cd94f4-7nkt9 
+
+observation:
+
+when i polled the vote, from the above command observed that entry has been added to the DB.  
+
+ERROR:  duplicate key value violates unique constraint "votes_id_key"
+DETAIL:  Key (id)=(795b76c70483d3b) already exists.
+STATEMENT:  INSERT INTO votes (id, vote) VALUES ($1, $2)
+
+----------------------------------------------------------------- 
+
+command:
+
+kubectl logs worker-dd46d7584-4f84t
+
+observation:
+
+when i polled the vote, from the above command observed that worker processing the vote from redis to DB.
+
+
+Connected to db
+Found redis at 10.106.6.45
+Connecting to redis
+Processing vote for 'b' by '795b76c70483d3b'
+
+----------------------------------------------------------------- 
+
+command:
+
+kubectl delete pod db-b54cd94f4-7nkt9
+
+observation:
+
+when i deleted the DB pod, observed that Result Pod and Worker Pod got restarted.
+
+[root@ip-172-31-25-193 k8s-specifications]# kubectl get pods
+NAME                      READY   STATUS    RESTARTS   AGE
+db-b54cd94f4-wsvwd        1/1     Running   0          49s
+redis-868d64d78-dhfm6     1/1     Running   0          16h
+result-5d57b59f4b-vn69f   1/1     Running   1          16h
+vote-94849dc97-lthmm      1/1     Running   0          16h
+worker-dd46d7584-4f84t    1/1     Running   1          16h
+
+When i checked the reason for Result and worker pod restart, found that Result pod lost the communication with DB pod hence restarted themselves to connect new DB Pod.
+
+Also worker pod also reestablished the connection with DB.
+
+Since DB Pod is placed between Result and worker pod, hence these will always affect if any problem with DB pod.
+
+[root@ip-172-31-25-193 k8s-specifications]# kubectl logs result-5d57b59f4b-vn69f
+Error performing query: error: relation "votes" does not exist
+Error performing query: error: relation "votes" does not exist
+Error performing query: error: relation "votes" does not exist
+
+[root@ip-172-31-25-193 k8s-specifications]# kubectl logs worker-dd46d7584-4f84t
+[root@ip-172-31-25-193 k8s-specifications]# kubectl logs worker-dd46d7584-4f84t
+Connected to db
+Found redis at 10.106.6.45
+Connecting to redis
+
+----------------------------------------------------------------- 
+command:
+
+kubectl delete pod worker-dd46d7584-4f84t
+
+kubectl describe pods worker-dd46d7584-4f84t
+
+observation:
+
+Whenever delete the worker pod, it always re-create by pulling the images from docker hub. Need to see why it's not picked from local.
+
+  Normal  Scheduled  13s   default-scheduler  Successfully assigned default/worker-dd46d7584-4f84t to ip-172-31-27-135.ap-southeast-1.compute.internal
+  Normal  Pulling    10s   kubelet            Pulling image "dockersamples/examplevotingapp_worker"
+  Normal  Pulled     8s    kubelet            Successfully pulled image "dockersamples/examplevotingapp_worker"
+  Normal  Created    8s    kubelet            Created container worker
+  Normal  Started    7s    kubelet            Started container worker
+
+----------------------------------------------------------------- 
+
+command:
+
+kubectl delete pod vote-94849dc97-lthmm
+
+observation:
+
+When i deleted the vote pod, it doesn't affect the voting web page since it's started to working with new vote pod. No downtime observed.
+
+----------------------------------------------------------------- 
