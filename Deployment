@@ -1,0 +1,32 @@
+command:
+
+git clone https://github.com/ashishrpandey/kubernetes-training/tree/master/09-deployments
+
+command: 
+
+vi kubia-deployment-and-service.yaml
+
+command:
+
+kubectl get deployment
+
+command:
+
+kubectl get rs
+
+command:
+
+kubectl scale deploy kubia --replicas =1
+
+command:
+
+kubectl describe deployment kubia
+
+to check min ready second :0
+
+command:
+kubectl set image deployment kubia nodejs=luksa/kubia:v2
+
+command: kubectl get po
+
+
